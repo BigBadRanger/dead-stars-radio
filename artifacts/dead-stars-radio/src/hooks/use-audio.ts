@@ -2,113 +2,107 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import * as Tone from 'tone';
 import { SonificationParams, LightCurveData } from '@workspace/api-client-react';
 
+// Pentatonic scale intervals (semitones from root) — always sounds harmonious
+const PENTATONIC = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+
+function fluxToFreq(flux: number, baseFreq: number): number {
+  const idx = Math.round(flux * (PENTATONIC.length - 1));
+  const semitones = PENTATONIC[Math.max(0, Math.min(idx, PENTATONIC.length - 1))];
+  return baseFreq * Math.pow(2, semitones / 12);
+}
+
 export function useAudio(params?: SonificationParams, lightcurve?: LightCurveData) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [analyser, setAnalyser] = useState<Tone.Analyser | null>(null);
-  
-  const synthRef = useRef<Tone.Synth | Tone.FMSynth | Tone.AMSynth | null>(null);
-  const lfoRef = useRef<Tone.LFO | null>(null);
-  const loopRef = useRef<Tone.Loop | null>(null);
 
-  // Initialize Audio
+  const synthRef = useRef<Tone.PolySynth | null>(null);
+  const loopRef = useRef<Tone.Loop | null>(null);
+  const fxChainRef = useRef<Tone.ToneAudioNode[]>([]);
+
+  const disposeAll = useCallback(() => {
+    loopRef.current?.dispose();
+    loopRef.current = null;
+    synthRef.current?.releaseAll();
+    synthRef.current?.dispose();
+    synthRef.current = null;
+    fxChainRef.current.forEach(node => node.dispose());
+    fxChainRef.current = [];
+    Tone.Transport.stop();
+    Tone.Transport.cancel();
+  }, []);
+
   const initAudio = useCallback(async () => {
     await Tone.start();
-    
-    if (synthRef.current) {
-      synthRef.current.dispose();
-    }
-    if (lfoRef.current) {
-      lfoRef.current.dispose();
-    }
-    if (loopRef.current) {
-      loopRef.current.dispose();
-      Tone.Transport.stop();
-    }
+    disposeAll();
 
-    const newAnalyser = new Tone.Analyser("waveform", 256);
+    const newAnalyser = new Tone.Analyser('waveform', 256);
     setAnalyser(newAnalyser);
 
-    // Create synth based on timbre
-    const timbre = (params?.timbre || 'sine') as Tone.ToneOscillatorType;
-    let synth: Tone.Synth | Tone.FMSynth | Tone.AMSynth;
+    // Build ethereal effects chain
+    const reverb = new Tone.Reverb({ decay: 9, preDelay: 0.15, wet: 0.7 });
+    await reverb.ready;
 
-    if (timbre === 'fm') {
-      synth = new Tone.FMSynth({
-        oscillator: { type: 'sine' },
-        modulation: { type: 'square' },
-        modulationIndex: 2
-      }).chain(newAnalyser, Tone.Destination);
-    } else {
-      synth = new Tone.Synth({
-        oscillator: { type: timbre }
-      }).chain(newAnalyser, Tone.Destination);
-    }
-    
+    const chorus = new Tone.Chorus({ frequency: 0.35, delayTime: 4, depth: 0.75, wet: 0.5 }).start();
+    const delay = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.28, wet: 0.22 });
+
+    fxChainRef.current = [chorus, delay, reverb, newAnalyser];
+
+    // Lush polyphonic pad — slow attack/release, pure sines
+    const synth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: 'sine' },
+      envelope: { attack: 2.8, decay: 1.2, sustain: 0.65, release: 4.5 },
+      volume: -10,
+    });
+    synth.chain(chorus, delay, reverb, newAnalyser, Tone.Destination);
     synthRef.current = synth;
 
-    const baseFreq = params?.baseFrequency || 440;
-    
-    if (params?.pulseRate) {
-      // Pulse effect
-      const lfo = new Tone.LFO(params.pulseRate / 60, baseFreq * 0.9, baseFreq * 1.1).start();
-      lfo.connect(synth.frequency);
-      lfoRef.current = lfo;
-      synth.triggerAttack(baseFreq);
-    } else if (lightcurve && lightcurve.points.length > 0) {
-      // Modulate frequency based on light curve
-      let i = 0;
+    const baseFreq = params?.baseFrequency || 220; // A3 — warm, not shrill
+
+    if (lightcurve && lightcurve.points.length > 0) {
       const pts = lightcurve.points;
-      
+      let i = 0;
+
       const loop = new Tone.Loop((time) => {
+        synth.releaseAll(time);
         const pt = pts[i % pts.length];
-        // simple modulation based on flux
-        const modFreq = baseFreq * (0.8 + (pt.flux * 0.4)); 
-        synth.setNote(modFreq, time);
+        const note = fluxToFreq(pt.flux, baseFreq);
+        const vel = 0.4 + pt.flux * 0.45;
+
+        // Root note
+        synth.triggerAttack(note, time, vel);
+        // Soft fifth harmony every other note
+        if (i % 2 === 0) {
+          synth.triggerAttack(note * 1.498, time + 0.3, vel * 0.5);
+        }
         i++;
-      }, "8n");
-      
-      synth.triggerAttack(baseFreq);
+      }, '2n');
+
+      Tone.Transport.bpm.value = 38;
       loop.start(0);
       Tone.Transport.start();
       loopRef.current = loop;
     } else {
-      synth.triggerAttack(baseFreq);
+      // Simple sustained pad for stars without light curve data
+      const notes = [baseFreq, baseFreq * 1.25, baseFreq * 1.5];
+      notes.forEach((n, idx) => {
+        synth.triggerAttack(n, `+${idx * 0.5}`, 0.4);
+      });
     }
 
     setIsPlaying(true);
-  }, [params, lightcurve]);
+  }, [params, lightcurve, disposeAll]);
 
   const stopAudio = useCallback(() => {
-    if (synthRef.current) {
-      synthRef.current.triggerRelease();
-      setTimeout(() => synthRef.current?.dispose(), 500);
-      synthRef.current = null;
-    }
-    if (lfoRef.current) {
-      lfoRef.current.dispose();
-      lfoRef.current = null;
-    }
-    if (loopRef.current) {
-      loopRef.current.dispose();
-      Tone.Transport.stop();
-      loopRef.current = null;
-    }
+    disposeAll();
     setIsPlaying(false);
-  }, []);
+  }, [disposeAll]);
 
   const toggle = useCallback(() => {
-    if (isPlaying) {
-      stopAudio();
-    } else {
-      initAudio();
-    }
+    if (isPlaying) stopAudio();
+    else initAudio();
   }, [isPlaying, initAudio, stopAudio]);
 
-  useEffect(() => {
-    return () => {
-      stopAudio();
-    };
-  }, [stopAudio]);
+  useEffect(() => () => disposeAll(), [disposeAll]);
 
   return { isPlaying, toggle, analyser };
 }
