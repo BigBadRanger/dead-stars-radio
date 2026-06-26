@@ -1,0 +1,149 @@
+
+<style>
+* { box-sizing: border-box; }
+.bp { padding: 1rem 0 2rem; font-family: inherit; }
+.section { margin-bottom: 1.5rem; }
+.section-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.75rem; }
+.card { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 0.6rem; }
+.card-title { font-size: 14px; font-weight: 500; color: var(--text-primary); margin: 0 0 4px; }
+.card-body { font-size: 13px; color: var(--text-secondary); line-height: 1.55; margin: 0; }
+.tag { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 500; display: inline-block; margin-bottom: 6px; }
+.tag-blue { background: #E6F1FB; color: #0C447C; }
+.tag-purple { background: #EEEDFE; color: #3C3489; }
+.tag-teal { background: #E1F5EE; color: #085041; }
+.tag-amber { background: #FAEEDA; color: #633806; }
+.tag-coral { background: #FAECE7; color: #712B13; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.6rem; }
+.week-card { background: var(--surface-2); border: 0.5px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; }
+.week-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
+.week-title { font-size: 14px; font-weight: 500; color: var(--text-primary); margin: 0 0 8px; }
+.task { font-size: 12px; color: var(--text-secondary); padding: 4px 0; border-bottom: 0.5px solid var(--border); line-height: 1.4; }
+.task:last-child { border-bottom: none; }
+.task::before { content: "→ "; color: var(--text-muted); }
+.highlight { background: #EEEDFE; border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 0.6rem; }
+.highlight-label { font-size: 11px; font-weight: 600; color: #3C3489; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.highlight-text { font-size: 13px; color: #3C3489; line-height: 1.55; }
+.stack-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pill { font-size: 12px; padding: 4px 10px; border-radius: 20px; background: var(--surface-1); border: 0.5px solid var(--border); color: var(--text-secondary); }
+.data-rec { background: #E1F5EE; border-radius: 12px; padding: 1rem 1.25rem; }
+.data-label { font-size: 11px; font-weight: 600; color: #085041; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.data-text { font-size: 13px; color: #085041; line-height: 1.55; }
+</style>
+
+<div class="bp">
+
+  <div class="section">
+    <div class="section-title">What it is</div>
+    <div class="highlight">
+      <div class="highlight-label">The concept</div>
+      <div class="highlight-text">Dead Stars Radio is a web app where users tune into real stars using actual NASA light curve data. Each star is sonified into an audio signal — its brightness over time becomes pitch, rhythm, and texture. A generated image shows the star in multiple spectra. An AI narrator explains what you're hearing, including whether the star still exists. Some of what you're listening to is a fossil — light and sound from something already gone.</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Data strategy — recommended approach</div>
+    <div class="data-rec">
+      <div class="data-label">Hybrid: Curated dataset + live NASA API</div>
+      <div class="data-text">Pre-load 25 hand-picked stars from NASA's MAST archive (light curve CSVs — free, no auth needed for most). These power your demo reliably. Also wire the NASA Exoplanet Archive API for live search — when someone types a star name, it fetches real data. Curated = demo-safe. Live API = the jaw-drop moment.</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">System architecture</div>
+    <div class="card">
+      <span class="tag tag-blue">Layer 1 — Data</span>
+      <p class="card-title">Star Data Ingestion</p>
+      <p class="card-body">NASA MAST API for light curves (brightness over time). NASA Exoplanet Archive for stellar parameters (mass, age, distance, spectral class, alive/dead status). Pre-process into a normalized format: time series of flux values + metadata object per star.</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-teal">Layer 2 — Sonification</span>
+      <p class="card-title">Light Curve → Audio Engine</p>
+      <p class="card-body">Map flux (brightness) to pitch and amplitude. Map periodicity (pulsing stars) to rhythm. Map spectral class (O, B, A, F, G, K, M) to instrument timbre — hot blue stars = high-frequency tones, cool red dwarfs = low resonant hum. Use Tone.js in the browser for real-time audio synthesis from the data. No pre-rendered audio files — it generates live from the numbers.</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-purple">Layer 3 — Vision</span>
+      <p class="card-title">Multimodal Star Imagery</p>
+      <p class="card-body">Use real NASA image assets where available (most famous stars have public domain imagery). For lesser-known stars, generate an image using the stellar parameters as prompt inputs — spectral class, temperature, and size drive the visual aesthetic. Show 2–3 views: visible light, X-ray, infrared.</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-amber">Layer 4 — AI Narration</span>
+      <p class="card-title">Claude Agent Narrator</p>
+      <p class="card-body">A Claude agent receives the star's metadata + sonification parameters and generates a real-time narration: what you're hearing, why it sounds this way, the star's life story, and crucially — whether it still exists. If the star is dead, the agent narrates the transmission lag. "The light you see left this star 640 years ago. It may no longer exist."</p>
+    </div>
+    <div class="card">
+      <span class="tag tag-coral">Layer 5 — UI</span>
+      <p class="card-title">The Radio Interface</p>
+      <p class="card-body">Aesthetic: a retro-futurist deep space radio. Star selector (search or browse the curated dial). Waveform visualizer that pulses to the audio. Star portrait with spectral overlays. Narration panel that streams in as audio plays. "Transmission age" indicator showing how old the signal is. Dead star indicator — a subtle red glow if the star no longer exists.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Tech stack</div>
+    <div class="card">
+      <div class="stack-row">
+        <span class="pill">React (frontend)</span>
+        <span class="pill">Tone.js (audio synthesis)</span>
+        <span class="pill">NASA MAST API</span>
+        <span class="pill">NASA Exoplanet Archive</span>
+        <span class="pill">Claude API (narration agent)</span>
+        <span class="pill">Stable Diffusion / DALL-E (star imagery)</span>
+        <span class="pill">D3.js (waveform viz)</span>
+        <span class="pill">Python backend (data pre-processing)</span>
+        <span class="pill">Vercel or Netlify (deploy)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Build timeline</div>
+    <div class="two-col">
+      <div class="week-card">
+        <div class="week-label">Week 1</div>
+        <div class="week-title">Data + Audio Core</div>
+        <div class="task">Set up NASA MAST API + pull 25 star light curves</div>
+        <div class="task">Normalize data into sonification-ready format</div>
+        <div class="task">Build Tone.js sonification engine (flux → pitch/rhythm)</div>
+        <div class="task">Map spectral class to instrument timbre</div>
+        <div class="task">Wire Claude narration agent with star metadata</div>
+        <div class="task">Test full pipeline on 5 stars end-to-end</div>
+      </div>
+      <div class="week-card">
+        <div class="week-label">Week 2</div>
+        <div class="week-title">UI + Polish + Demo Prep</div>
+        <div class="task">Build the radio UI in React</div>
+        <div class="task">D3 waveform visualizer synced to audio</div>
+        <div class="task">Star imagery pipeline (real NASA assets + generated)</div>
+        <div class="task">Live NASA API search for audience-chosen stars</div>
+        <div class="task">Dead star indicator + transmission age display</div>
+        <div class="task">Deploy to Vercel, rehearse live demo arc</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Live demo arc (5–10 min)</div>
+    <div class="card">
+      <p class="card-body"><strong style="color:var(--text-primary)">Min 0–1:</strong> Open in silence. Pull up the radio UI. No explanation. Tune to Betelgeuse. Audio starts — a low, slow, pulsing hum. Let it play for 15 seconds. Then say: "What you're hearing left this star 700 years ago. Betelgeuse is expected to go supernova. It may already be dead. We won't know for 700 years."</p>
+    </div>
+    <div class="card">
+      <p class="card-body"><strong style="color:var(--text-primary)">Min 2–4:</strong> Tune to a contrasting star — a hot blue O-class star. The sound completely changes. Explain the sonification mapping live. Show the waveform responding. Read a line from the AI narration as it streams in.</p>
+    </div>
+    <div class="card">
+      <p class="card-body"><strong style="color:var(--text-primary)">Min 5–7:</strong> Explain the architecture — NASA data, Tone.js, Claude narration agent. Keep it tight, one slide max.</p>
+    </div>
+    <div class="card">
+      <p class="card-body"><strong style="color:var(--text-primary)">Min 8–10:</strong> Live audience moment — ask someone to shout out any star they know. Search it live. Let the signal play. Let the AI narrate it. If it's a dead star, that moment lands on its own.</p>
+    </div>
+  </div>
+
+  <div class="highlight">
+    <div class="highlight-label">The line that opens your presentation</div>
+    <div class="highlight-text">"Everything you're about to hear is real data from real stars. Some of those stars no longer exist. You are listening to the past. Welcome to Dead Stars Radio."</div>
+  </div>
+
+</div>
+<script>
+  // subtle pulse animation on highlight
+  const h = document.querySelector('.highlight');
+</script>
