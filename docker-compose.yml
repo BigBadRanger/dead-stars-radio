@@ -1,0 +1,47 @@
+services:
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: deadstars
+      POSTGRES_USER: deadstars
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deadstars"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://deadstars:${POSTGRES_PASSWORD:-changeme}@db:5432/deadstars
+      SESSION_SECRET: ${SESSION_SECRET}
+      # Replace with real Anthropic credentials when running outside Replit:
+      AI_INTEGRATIONS_ANTHROPIC_BASE_URL: https://api.anthropic.com
+      AI_INTEGRATIONS_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      PORT: 8080
+    expose:
+      - "8080"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
