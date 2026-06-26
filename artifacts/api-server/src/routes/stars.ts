@@ -218,6 +218,7 @@ router.post("/:id/narration", async (req, res) => {
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders(); // push headers immediately so proxies open the stream
 
     const transmissionAge = Math.round(star.transmissionAgeYears);
     const spectralDesc: Record<string, string> = {
@@ -268,7 +269,7 @@ The listener is hearing this star sonified: its brightness (flux) has been mappe
 
     for await (const event of stream) {
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        res.write(`data: ${JSON.stringify({ content: event.delta.text })}\n\n`);
+        res.write(`data: ${JSON.stringify({ text: event.delta.text })}\n\n`);
       }
     }
 
