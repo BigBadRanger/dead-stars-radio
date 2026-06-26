@@ -1,22 +1,27 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Dead Stars Radio API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: stars
+    description: Star data operations
+  - name: narration
+    description: AI narration operations
+  - name: imagery
+    description: Star imagery operations
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +29,165 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /stars:
+    get:
+      operationId: listStars
+      tags: [stars]
+      summary: List curated stars
+      parameters:
+        - name: spectralClass
+          in: query
+          schema:
+            type: string
+          description: Filter by spectral class (O, B, A, F, G, K, M)
+        - name: isAlive
+          in: query
+          schema:
+            type: boolean
+          description: Filter by alive/dead status
+      responses:
+        "200":
+          description: List of curated stars
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Star"
+
+  /stars/search:
+    get:
+      operationId: searchStars
+      tags: [stars]
+      summary: Search stars by name via NASA Exoplanet Archive
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Star name query
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Star"
+
+  /stars/featured:
+    get:
+      operationId: getFeaturedStar
+      tags: [stars]
+      summary: Get a featured star of the moment (random curated pick)
+      responses:
+        "200":
+          description: Featured star
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Star"
+
+  /stars/{id}:
+    get:
+      operationId: getStar
+      tags: [stars]
+      summary: Get a single star with full metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Star detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Star"
+        "404":
+          description: Not found
+
+  /stars/{id}/lightcurve:
+    get:
+      operationId: getStarLightCurve
+      tags: [stars]
+      summary: Get light curve data for a star (flux over time)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Light curve data points
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LightCurveData"
+
+  /stars/{id}/imagery:
+    get:
+      operationId: getStarImagery
+      tags: [imagery]
+      summary: Get or generate imagery for a star
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Star imagery URLs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StarImagery"
+
+  /stars/{id}/narration:
+    post:
+      operationId: generateNarration
+      tags: [narration]
+      summary: Stream AI narration for a star (SSE)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NarrationRequest"
+      responses:
+        "200":
+          description: SSE stream of narration text
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /stats:
+    get:
+      operationId: getStats
+      tags: [stars]
+      summary: Get aggregate stats about the star catalog
+      responses:
+        "200":
+          description: Catalog statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +198,164 @@ components:
       required:
         - status
 
+    Star:
+      type: object
+      required:
+        - id
+        - name
+        - spectralClass
+        - distanceLightYears
+        - isAlive
+        - transmissionAgeYears
+        - description
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        commonName:
+          type: ["string", "null"]
+        spectralClass:
+          type: string
+          description: "O, B, A, F, G, K, or M"
+        subtype:
+          type: ["string", "null"]
+          description: Stellar subtype (e.g. supergiant, dwarf)
+        temperature:
+          type: ["number", "null"]
+          description: Surface temperature in Kelvin
+        massSolar:
+          type: ["number", "null"]
+          description: Mass in solar masses
+        radiusSolar:
+          type: ["number", "null"]
+          description: Radius in solar radii
+        luminositySolar:
+          type: ["number", "null"]
+          description: Luminosity relative to Sun
+        distanceLightYears:
+          type: number
+          description: Distance from Earth in light years
+        isAlive:
+          type: boolean
+          description: Whether the star still exists
+        transmissionAgeYears:
+          type: number
+          description: How many years ago the light we see left the star
+        deathYear:
+          type: ["integer", "null"]
+          description: Approximate year of death (negative = BCE)
+        constellation:
+          type: ["string", "null"]
+        nasaId:
+          type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+        generatedImageUrl:
+          type: ["string", "null"]
+        sonificationParams:
+          $ref: "#/components/schemas/SonificationParams"
+        description:
+          type: string
+
+    SonificationParams:
+      type: object
+      properties:
+        baseFrequency:
+          type: number
+          description: Base frequency in Hz for audio synthesis
+        timbre:
+          type: string
+          description: Instrument timbre (sine, sawtooth, square, triangle, fm)
+        pulseRate:
+          type: ["number", "null"]
+          description: Pulse rate in BPM for variable stars
+        harmonics:
+          type: array
+          items:
+            type: number
+
+    LightCurveData:
+      type: object
+      required:
+        - starId
+        - points
+        - source
+      properties:
+        starId:
+          type: integer
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/FluxPoint"
+        source:
+          type: string
+          description: "curated or nasa_api"
+        period:
+          type: ["number", "null"]
+          description: Pulsation period in days
+
+    FluxPoint:
+      type: object
+      required:
+        - time
+        - flux
+      properties:
+        time:
+          type: number
+          description: Time (BJD or relative days)
+        flux:
+          type: number
+          description: Normalized flux value
+
+    StarImagery:
+      type: object
+      required:
+        - starId
+      properties:
+        starId:
+          type: integer
+        visibleLight:
+          type: ["string", "null"]
+          description: URL of visible light image
+        infrared:
+          type: ["string", "null"]
+          description: URL of infrared image
+        xray:
+          type: ["string", "null"]
+          description: URL of X-ray image
+        generated:
+          type: ["string", "null"]
+          description: URL of AI-generated image
+
+    NarrationRequest:
+      type: object
+      properties:
+        context:
+          type: string
+          description: Additional context about what the user is hearing
+
+    CatalogStats:
+      type: object
+      required:
+        - totalStars
+        - deadStars
+        - aliveStars
+        - spectralBreakdown
+        - avgTransmissionAge
+        - farthestStar
+      properties:
+        totalStars:
+          type: integer
+        deadStars:
+          type: integer
+        aliveStars:
+          type: integer
+        spectralBreakdown:
+          type: object
+          additionalProperties:
+            type: integer
+        avgTransmissionAge:
+          type: number
+        farthestStar:
+          $ref: "#/components/schemas/Star"
