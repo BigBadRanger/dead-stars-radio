@@ -183,7 +183,24 @@ router.get("/:id/lightcurve", async (req, res) => {
   }
 });
 
-// GET /stars/:id/imagery — star imagery
+// Fetch first image URL matching a NASA image search query
+async function nasaImage(query: string): Promise<string | null> {
+  try {
+    const url = `https://images-api.nasa.gov/search?q=${encodeURIComponent(query)}&media_type=image&page_size=1`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return null;
+    const json = await res.json() as any;
+    const items = json?.collection?.items ?? [];
+    if (items.length === 0) return null;
+    const links: any[] = items[0]?.links ?? [];
+    const preview = links.find((l: any) => l.rel === "preview");
+    return preview?.href ?? links[0]?.href ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// GET /stars/:id/imagery — star imagery (multi-wavelength from NASA)
 router.get("/:id/imagery", async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
@@ -192,12 +209,29 @@ router.get("/:id/imagery", async (req, res) => {
     const [star] = await db.select().from(starsTable).where(eq(starsTable.id, id));
     if (!star) return res.status(404).json({ error: "Not found" });
 
+    // Fire all NASA queries in parallel; fall back to stored URLs on miss
+    const [visible, infrared, xray, hubble] = await Promise.all([
+      nasaImage(star.name),
+      nasaImage(`${star.name} infrared`),
+      nasaImage(`${star.name} xray chandra`),
+      nasaImage(`${star.name} hubble`),
+    ]);
+
+    // Deduplicate — don't show same URL in multiple tabs
+    const seen = new Set<string>();
+    const dedup = (url: string | null, fallback: string | null = null) => {
+      const u = url ?? fallback;
+      if (!u || seen.has(u)) return null;
+      seen.add(u);
+      return u;
+    };
+
     res.json({
       starId: id,
-      visibleLight: star.imageUrl,
-      infrared: null,
-      xray: null,
-      generated: star.generatedImageUrl,
+      visibleLight: dedup(visible, star.imageUrl),
+      infrared:     dedup(infrared),
+      xray:         dedup(xray),
+      generated:    dedup(hubble, star.generatedImageUrl),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get imagery");

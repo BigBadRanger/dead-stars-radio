@@ -37,11 +37,11 @@ export default function RadioPage() {
   const { data: lightcurve } = useGetStarLightCurve(selectedStarId as number, { query: { enabled: !!selectedStarId } });
 
   const { isPlaying, toggle: toggleAudio, analyser } = useAudio(star?.sonificationParams, lightcurve);
-  const { text: narrationText, isStreaming: isNarrating, startStream: startNarration, stopStream: stopNarration } = useNarration(selectedStarId);
+  const { text: narrationText, isStreaming: isNarrating, startStream: startNarration, stopStream: stopNarration, reset: resetNarration } = useNarration(selectedStarId);
 
   useEffect(() => {
     if (isPlaying) toggleAudio();
-    if (isNarrating) stopNarration();
+    resetNarration(); // always clear text + stop TTS when star changes
   }, [selectedStarId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!selectedStarId && isFeaturedLoading) {
