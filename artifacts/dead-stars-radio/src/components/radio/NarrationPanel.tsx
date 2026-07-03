@@ -16,12 +16,10 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
 
   const { speak, stop, isPlaying, isLoading, voice, setVoice, setEnabled } = useTTS();
 
-  // Stop audio when a new stream starts
+  // Stop audio whenever text is cleared (star change, reset, new stream)
   useEffect(() => {
-    if (isStreaming && text.length === 0) {
-      stop();
-    }
-  }, [isStreaming, text, stop]);
+    if (!text) stop();
+  }, [text, stop]);
 
   // Auto-scroll as text arrives
   useEffect(() => {
@@ -96,17 +94,7 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
           )}
 
           {/* Main action button */}
-          {!isStreaming && !isPlaying ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onStart}
-              className="font-display tracking-wider border-primary/50 text-primary hover:bg-primary/20 hover:border-primary gap-2 h-8 shrink-0"
-            >
-              <Play className="w-3 h-3" />
-              DECODE SIGNAL
-            </Button>
-          ) : isStreaming ? (
+          {isStreaming ? (
             <Button
               variant="outline"
               size="sm"
@@ -116,7 +104,7 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
               <Square className="w-3 h-3" />
               HALT
             </Button>
-          ) : (
+          ) : (isLoading || isPlaying) ? (
             <Button
               variant="outline"
               size="sm"
@@ -125,6 +113,16 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
             >
               <Square className="w-3 h-3" />
               HALT AUDIO
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onStart}
+              className="font-display tracking-wider border-primary/50 text-primary hover:bg-primary/20 hover:border-primary gap-2 h-8 shrink-0"
+            >
+              <Play className="w-3 h-3" />
+              DECODE SIGNAL
             </Button>
           )}
         </div>
