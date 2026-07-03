@@ -2,6 +2,7 @@
 # Dead Stars Radio
 
 Dead Stars Radio is an AI-assisted web application that transforms real stellar light curve data into sound.
+Concept, product design, UX direction, prompt engineering, and technical orchestration by Steven Wilson.
 
 Users tune into stars as if they were radio stations. Brightness over time becomes pitch, rhythm, and texture. AI narration explains what the listener is hearing and whether the signal represents a living star or a fossil of something already gone.
 
@@ -20,10 +21,11 @@ Most AI demos answer questions. I wanted to build an experience that used AI, sc
 
 ## Screenshots
 
-
 <img width="1541" height="1213" alt="DSR" src="https://github.com/user-attachments/assets/1a03bf35-5f52-4a47-9ccc-eba7a2f97ffc" />
 
 ## Architecture
+
+NASA data → preprocessing → light curve mapping → audio synthesis → waveform visualization → AI narration → user experience
 
 Tech stack
 1.	React (frontend) 
