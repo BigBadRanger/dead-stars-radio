@@ -1,3 +1,4 @@
+
 # Dead Stars Radio
 
 Dead Stars Radio is an AI-assisted web application that transforms real stellar light curve data into sound.
@@ -20,7 +21,8 @@ Most AI demos answer questions. I wanted to build an experience that used AI, sc
 ## Screenshots
 
 Add screenshots here.
-/Screenshots/DSR.jpg
+
+<img width="1541" height="1213" alt="DSR" src="https://github.com/user-attachments/assets/1a03bf35-5f52-4a47-9ccc-eba7a2f97ffc" />
 
 ## Architecture
 
