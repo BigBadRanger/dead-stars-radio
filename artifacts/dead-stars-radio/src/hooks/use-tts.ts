@@ -12,12 +12,20 @@ export const VOICE_OPTIONS: { value: OpenAIVoice; label: string }[] = [
 ];
 
 export function useTTS() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [voice, setVoice] = useState<OpenAIVoice>("shimmer");
-  const [enabled, setEnabledState] = useState(true);
-  const enabledRef = useRef(true);
+  const audioRef      = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef  = useRef<string | null>(null);
+  const [isPlaying,  setIsPlaying]  = useState(false);
+  const [isLoading,  setIsLoading]  = useState(false);
+  const [voice,      setVoice]      = useState<OpenAIVoice>("shimmer");
+  const [enabled,    setEnabledState] = useState(true);
+  const enabledRef   = useRef(true);
+  const voiceRef     = useRef<OpenAIVoice>("shimmer");
+
+  // Keep voiceRef in sync so speak() always uses the latest voice choice
+  const handleSetVoice = useCallback((v: OpenAIVoice) => {
+    voiceRef.current = v;
+    setVoice(v);
+  }, []);
 
   const stop = useCallback(() => {
     if (audioRef.current) {
@@ -30,6 +38,7 @@ export function useTTS() {
       objectUrlRef.current = null;
     }
     setIsPlaying(false);
+    setIsLoading(false);
   }, []);
 
   const setEnabled = useCallback((on: boolean) => {
@@ -38,34 +47,36 @@ export function useTTS() {
     if (!on) stop();
   }, [stop]);
 
-  const speak = useCallback(async (text: string, voiceOverride?: OpenAIVoice) => {
+  // speak() must be called directly from a user-gesture handler so the browser
+  // permits audio playback without autoplay policy blocking it.
+  const speak = useCallback(async (text: string) => {
     if (!enabledRef.current || !text.trim()) return;
     stop();
+    setIsLoading(true);
 
     try {
       const response = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text.trim(), voice: voiceOverride ?? voice }),
+        body: JSON.stringify({ text: text.trim(), voice: voiceRef.current }),
       });
-      if (!response.ok) return;
+      if (!response.ok) { setIsLoading(false); return; }
 
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+      const url  = URL.createObjectURL(blob);
       objectUrlRef.current = url;
 
       const audio = new Audio(url);
       audioRef.current = audio;
-
-      audio.onplay  = () => setIsPlaying(true);
-      audio.onended = () => { stop(); };
-      audio.onerror = () => { stop(); };
+      audio.onplay  = () => { setIsLoading(false); setIsPlaying(true); };
+      audio.onended = () => stop();
+      audio.onerror = () => stop();
 
       await audio.play();
     } catch {
       stop();
     }
-  }, [voice, stop]);
+  }, [stop]);
 
-  return { speak, stop, isPlaying, voice, setVoice, enabled, setEnabled };
+  return { speak, stop, isPlaying, isLoading, voice, setVoice: handleSetVoice, enabled, setEnabled };
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Radio, Volume2, VolumeX, ChevronDown } from 'lucide-react';
+import { Play, Square, Radio, Volume2, VolumeX, ChevronDown, Loader2 } from 'lucide-react';
 import { useTTS, VOICE_OPTIONS, type OpenAIVoice } from '@/hooks/use-tts';
 
 interface NarrationPanelProps {
@@ -12,26 +12,16 @@ interface NarrationPanelProps {
 
 export function NarrationPanel({ text, isStreaming, onStart, onStop }: NarrationPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const spokenTextRef = useRef('');
   const [voiceOn, setVoiceOn] = useState(true);
 
-  const { speak, stop, isPlaying, voice, setVoice, setEnabled } = useTTS();
+  const { speak, stop, isPlaying, isLoading, voice, setVoice, setEnabled } = useTTS();
 
-  // When narration stream finishes with text, speak the full narration
-  useEffect(() => {
-    if (!isStreaming && text.length > 0 && voiceOn) {
-      spokenTextRef.current = text;
-      speak(text);
-    }
-  }, [isStreaming]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // When a new stream starts, cancel any in-progress audio
+  // Stop audio when a new stream starts
   useEffect(() => {
     if (isStreaming && text.length === 0) {
       stop();
-      spokenTextRef.current = '';
     }
-  }, [isStreaming, text]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isStreaming, text, stop]);
 
   // Auto-scroll as text arrives
   useEffect(() => {
@@ -50,6 +40,13 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
     stop();
     onStop();
   };
+
+  // Called directly from a button click — satisfies browser autoplay policy
+  const handlePlayVoice = () => {
+    speak(text);
+  };
+
+  const narrationDone = !isStreaming && text.length > 0;
 
   return (
     <div className="flex flex-col h-full border border-primary/30 bg-black/70 rounded-md overflow-hidden">
@@ -98,14 +95,8 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
             </span>
           )}
 
-          {isPlaying && !isStreaming && (
-            <span className="flex items-center gap-1.5 text-[10px] font-mono opacity-70 shrink-0">
-              <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
-              TRANSMITTING
-            </span>
-          )}
-
-          {!isStreaming ? (
+          {/* Main action button */}
+          {!isStreaming && !isPlaying ? (
             <Button
               variant="outline"
               size="sm"
@@ -115,7 +106,7 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
               <Play className="w-3 h-3" />
               DECODE SIGNAL
             </Button>
-          ) : (
+          ) : isStreaming ? (
             <Button
               variant="outline"
               size="sm"
@@ -124,6 +115,16 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
             >
               <Square className="w-3 h-3" />
               HALT
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={stop}
+              className="font-display tracking-wider border-destructive/50 text-destructive hover:bg-destructive/10 gap-2 h-8 shrink-0"
+            >
+              <Square className="w-3 h-3" />
+              HALT AUDIO
             </Button>
           )}
         </div>
@@ -151,10 +152,36 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
         )}
       </div>
 
+      {/* Footer: PLAY VOICE button + status */}
       {text && (
-        <div className="px-4 py-2 border-t border-primary/20 bg-primary/5 shrink-0 flex items-center justify-between">
+        <div className="px-4 py-2 border-t border-primary/20 bg-primary/5 shrink-0 flex items-center justify-between gap-2">
           <span className="font-mono text-[9px] opacity-40 tracking-widest">{text.length} CHARS RECEIVED</span>
-          <span className="font-mono text-[9px] opacity-40 tracking-widest">{voiceOn ? `VOICE: ${voice.toUpperCase()}` : 'VOICE: OFF'}</span>
+
+          {voiceOn && narrationDone && !isPlaying && !isLoading && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePlayVoice}
+              className="font-display tracking-wider border-primary/50 text-primary hover:bg-primary/20 hover:border-primary gap-1.5 h-7 text-[10px] shrink-0"
+            >
+              <Volume2 className="w-3 h-3" />
+              PLAY VOICE
+            </Button>
+          )}
+
+          {isLoading && (
+            <span className="flex items-center gap-1.5 font-mono text-[9px] opacity-60 shrink-0">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              GENERATING VOICE...
+            </span>
+          )}
+
+          {isPlaying && (
+            <span className="flex items-center gap-1.5 font-mono text-[9px] opacity-70 shrink-0">
+              <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+              TRANSMITTING
+            </span>
+          )}
         </div>
       )}
     </div>
