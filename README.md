@@ -20,6 +20,7 @@ Most AI demos answer questions. I wanted to build an experience that used AI, sc
 ## Screenshots
 
 Add screenshots here.
+/Screenshots/DSR.jpg
 
 ## Architecture
 
