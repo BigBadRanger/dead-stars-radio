@@ -20,13 +20,20 @@ Most AI demos answer questions. I wanted to build an experience that used AI, sc
 
 ## Screenshots
 
-Add screenshots here.
 
 <img width="1541" height="1213" alt="DSR" src="https://github.com/user-attachments/assets/1a03bf35-5f52-4a47-9ccc-eba7a2f97ffc" />
 
 ## Architecture
 
-Describe the frontend, backend, data source, audio generation, and AI narration pipeline.
+Tech stack
+1.	React (frontend) 
+2.	Tone.js (audio synthesis) 
+3.	NASA MAST API 
+4.	NASA Exoplanet Archive 
+5.	Claude API (narration agent) 
+6.	Stable Diffusion / DALL-E (star imagery) D3.js (waveform viz) 
+7.	Python backend (data pre-processing) 
+
 
 ## Lessons Learned
 
