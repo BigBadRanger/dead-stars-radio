@@ -183,24 +183,88 @@ router.get("/:id/lightcurve", async (req, res) => {
   }
 });
 
-// Fetch first image URL matching a NASA image search query
-async function nasaImage(query: string): Promise<string | null> {
-  try {
-    const url = `https://images-api.nasa.gov/search?q=${encodeURIComponent(query)}&media_type=image&page_size=1`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (!res.ok) return null;
-    const json = await res.json() as any;
-    const items = json?.collection?.items ?? [];
-    if (items.length === 0) return null;
-    const links: any[] = items[0]?.links ?? [];
-    const preview = links.find((l: any) => l.rel === "preview");
-    return preview?.href ?? links[0]?.href ?? null;
-  } catch {
-    return null;
-  }
-}
+// Real sky coordinates (J2000 RA/Dec in decimal degrees) for each seeded star.
+// Used to query the CDS hips2fits service for actual telescope survey images.
+const STAR_COORDS: Record<string, { ra: number; dec: number; fov: number }> = {
+  "Betelgeuse":          { ra: 88.7929,  dec:  7.4071,  fov: 0.5 },
+  "Rigel":               { ra: 78.6344,  dec: -8.2016,  fov: 0.5 },
+  "Sirius":              { ra: 101.2872, dec: -16.7161, fov: 0.5 },
+  "Proxima Centauri":    { ra: 217.4290, dec: -62.6796, fov: 0.3 },
+  "Vega":                { ra: 279.2347, dec:  38.7837, fov: 0.5 },
+  "Arcturus":            { ra: 213.9153, dec:  19.1822, fov: 0.5 },
+  "Antares":             { ra: 247.3519, dec: -26.4320, fov: 0.5 },
+  "Polaris":             { ra: 37.9529,  dec:  89.2641, fov: 0.5 },
+  "Deneb":               { ra: 310.3579, dec:  45.2803, fov: 0.5 },
+  "Eta Carinae":         { ra: 161.2650, dec: -59.6852, fov: 0.4 },
+  "UY Scuti":            { ra: 274.3085, dec: -12.5984, fov: 0.4 },
+  "Aldebaran":           { ra: 68.9802,  dec:  16.5093, fov: 0.5 },
+  "Spica":               { ra: 201.2983, dec: -11.1613, fov: 0.5 },
+  "Mira":                { ra: 34.8366,  dec:  -2.9777, fov: 0.4 },
+  "Fomalhaut":           { ra: 344.4127, dec: -29.6223, fov: 0.5 },
+  "Delta Cephei":        { ra: 337.2921, dec:  58.4153, fov: 0.4 },
+  "Epsilon Eridani":     { ra: 53.2327,  dec:  -9.4584, fov: 0.4 },
+  "Canopus":             { ra: 95.9879,  dec: -52.6958, fov: 0.5 },
+  "Altair":              { ra: 297.6958, dec:   8.8683, fov: 0.5 },
+  "Beta Pictoris":       { ra: 86.8213,  dec: -51.0665, fov: 0.4 },
+  "WR 104":              { ra: 270.5362, dec: -23.1300, fov: 0.3 },
+  "Sanduleak -69° 202":  { ra: 83.8671,  dec: -69.2690, fov: 0.4 },
+  "Tycho's Star":        { ra: 6.3389,   dec:  64.1417, fov: 0.5 },
+  "Kepler's Star":       { ra: 262.6775, dec: -21.4881, fov: 0.5 },
+  "V838 Monocerotis":    { ra: 103.0979, dec:  -3.7083, fov: 0.4 },
+};
 
-// GET /stars/:id/imagery — star imagery (multi-wavelength from NASA)
+// HiPS survey identifiers per wavelength band (CDS hips2fits service)
+const HIPS_SURVEYS: Record<string, string> = {
+  vis:  "CDS/P/DSS2/red",       // Optical red (DSS2)
+  ir:   "CDS/P/2MASS/color",    // Near-infrared (2MASS JHK color)
+  blue: "CDS/P/DSS2/blue",      // Optical blue (DSS2) — shown in SIM tab
+};
+
+// GET /stars/:id/imagery/tile/:band — proxy a real telescope image via CDS hips2fits
+router.get("/:id/imagery/tile/:band", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const band = req.params.band;
+  if (isNaN(id)) return res.status(400).end();
+
+  const hips = HIPS_SURVEYS[band];
+  if (!hips) return res.status(400).end();
+
+  try {
+    const [star] = await db.select().from(starsTable).where(eq(starsTable.id, id));
+    if (!star) return res.status(404).end();
+
+    const coords = STAR_COORDS[star.name];
+    if (!coords) return res.status(404).end(); // star not in coordinate table
+
+    const params = new URLSearchParams({
+      hips,
+      ra:         String(coords.ra),
+      dec:        String(coords.dec),
+      fov:        String(coords.fov),
+      width:      "480",
+      height:     "480",
+      projection: "TAN",
+      format:     "jpg",
+    });
+    const url = `https://alasky.cds.unistra.fr/hips-image-services/hips2fits?${params}`;
+
+    const upstream = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    const ct = upstream.headers.get("content-type") ?? "";
+    if (!upstream.ok || !ct.startsWith("image/")) {
+      req.log.warn({ status: upstream.status, ct }, "hips2fits returned non-image");
+      return res.status(502).end();
+    }
+    const buf = await upstream.arrayBuffer();
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.send(Buffer.from(buf));
+  } catch (err) {
+    req.log.error({ err }, "hips2fits tile fetch failed");
+    res.status(502).end();
+  }
+});
+
+// GET /stars/:id/imagery — return tile proxy URLs for each wavelength
 router.get("/:id/imagery", async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
@@ -209,29 +273,14 @@ router.get("/:id/imagery", async (req, res) => {
     const [star] = await db.select().from(starsTable).where(eq(starsTable.id, id));
     if (!star) return res.status(404).json({ error: "Not found" });
 
-    // Fire all NASA queries in parallel; fall back to stored URLs on miss
-    const [visible, infrared, xray, hubble] = await Promise.all([
-      nasaImage(star.name),
-      nasaImage(`${star.name} infrared`),
-      nasaImage(`${star.name} xray chandra`),
-      nasaImage(`${star.name} hubble`),
-    ]);
-
-    // Deduplicate — don't show same URL in multiple tabs
-    const seen = new Set<string>();
-    const dedup = (url: string | null, fallback: string | null = null) => {
-      const u = url ?? fallback;
-      if (!u || seen.has(u)) return null;
-      seen.add(u);
-      return u;
-    };
-
+    const hasCoords = star.name in STAR_COORDS;
+    const base = `/api/stars/${id}/imagery/tile`;
     res.json({
       starId: id,
-      visibleLight: dedup(visible, star.imageUrl),
-      infrared:     dedup(infrared),
-      xray:         dedup(xray),
-      generated:    dedup(hubble, star.generatedImageUrl),
+      visibleLight: hasCoords ? `${base}/vis`  : null,
+      infrared:     hasCoords ? `${base}/ir`   : null,
+      xray:         null,
+      generated:    hasCoords ? `${base}/blue` : null,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get imagery");

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Play, Square, Radio, Volume2, VolumeX, ChevronDown } from 'lucide-react';
-import { useTTS } from '@/hooks/use-tts';
+import { useTTS, VOICE_OPTIONS, type OpenAIVoice } from '@/hooks/use-tts';
 
 interface NarrationPanelProps {
   text: string;
@@ -12,32 +12,28 @@ interface NarrationPanelProps {
 
 export function NarrationPanel({ text, isStreaming, onStart, onStop }: NarrationPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const prevTextRef = useRef('');
+  const spokenTextRef = useRef('');
   const [voiceOn, setVoiceOn] = useState(true);
 
-  const { voices, selectedVoiceName, selectVoice, feedText, flush, stop, setEnabled } = useTTS();
+  const { speak, stop, isPlaying, voice, setVoice, setEnabled } = useTTS();
 
-  // Feed only newly-arrived text chunks to TTS
+  // When narration stream finishes with text, speak the full narration
   useEffect(() => {
-    const prev = prevTextRef.current;
-    if (text.length > prev.length) {
-      feedText(text.slice(prev.length));
-    }
-    prevTextRef.current = text;
-  }, [text, feedText]);
-
-  // Flush remaining sentence when stream ends; reset on new stream start
-  useEffect(() => {
-    if (!isStreaming && text.length > 0) {
-      flush();
-    }
-    if (isStreaming && text.length === 0) {
-      stop();
-      prevTextRef.current = '';
+    if (!isStreaming && text.length > 0 && voiceOn) {
+      spokenTextRef.current = text;
+      speak(text);
     }
   }, [isStreaming]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-scroll
+  // When a new stream starts, cancel any in-progress audio
+  useEffect(() => {
+    if (isStreaming && text.length === 0) {
+      stop();
+      spokenTextRef.current = '';
+    }
+  }, [isStreaming, text]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-scroll as text arrives
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -66,18 +62,16 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
         </h3>
 
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Voice selector */}
-          {voices.length > 0 && voiceOn && (
+          {/* OpenAI voice selector */}
+          {voiceOn && (
             <div className="relative flex items-center">
               <select
-                value={selectedVoiceName}
-                onChange={e => selectVoice(e.target.value, voices)}
-                className="appearance-none bg-black/60 border border-primary/30 text-primary font-mono text-[10px] tracking-wider pl-2 pr-6 py-1 rounded cursor-pointer hover:border-primary/60 focus:outline-none focus:border-primary/80 max-w-[160px]"
+                value={voice}
+                onChange={e => setVoice(e.target.value as OpenAIVoice)}
+                className="appearance-none bg-black/60 border border-primary/30 text-primary font-mono text-[10px] tracking-wider pl-2 pr-6 py-1 rounded cursor-pointer hover:border-primary/60 focus:outline-none focus:border-primary/80 max-w-[180px]"
               >
-                {voices.map(v => (
-                  <option key={v.name} value={v.name}>
-                    {v.name.replace(/^Google\s+/i, '').replace(/\s*\(.*?\)/g, '')}
-                  </option>
+                {VOICE_OPTIONS.map(v => (
+                  <option key={v.value} value={v.value}>{v.label}</option>
                 ))}
               </select>
               <ChevronDown className="w-3 h-3 absolute right-1.5 pointer-events-none text-primary/50" />
@@ -101,6 +95,13 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
             <span className="flex items-center gap-1.5 text-[10px] font-mono opacity-70 shrink-0">
               <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-primary inline-block" />
               RECEIVING
+            </span>
+          )}
+
+          {isPlaying && !isStreaming && (
+            <span className="flex items-center gap-1.5 text-[10px] font-mono opacity-70 shrink-0">
+              <span className="animate-pulse w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+              TRANSMITTING
             </span>
           )}
 
@@ -153,7 +154,7 @@ export function NarrationPanel({ text, isStreaming, onStart, onStop }: Narration
       {text && (
         <div className="px-4 py-2 border-t border-primary/20 bg-primary/5 shrink-0 flex items-center justify-between">
           <span className="font-mono text-[9px] opacity-40 tracking-widest">{text.length} CHARS RECEIVED</span>
-          <span className="font-mono text-[9px] opacity-40 tracking-widest">{voiceOn ? 'VOICE: ON' : 'VOICE: OFF'}</span>
+          <span className="font-mono text-[9px] opacity-40 tracking-widest">{voiceOn ? `VOICE: ${voice.toUpperCase()}` : 'VOICE: OFF'}</span>
         </div>
       )}
     </div>
